@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自習室預約系統 - Vanilla JS</title>
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        :root {
+            --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Dialog Backdrop Styles */
+        dialog::backdrop {
+            background-color: rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(4px);
+        }
+
+        dialog[open] {
+            animation: show 0.2s ease-out forwards;
+        }
+
+        @keyframes show {
+            from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
+            to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-zinc-50 text-zinc-900 selection:bg-purple-500/30 pb-24 sm:pb-8">
+    
+    <!-- Header -->
+    <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-zinc-200 px-4 py-4">
+        <div class="max-w-5xl mx-auto flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20 text-white">
+                        <i data-lucide="library" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-tight text-zinc-900">自習室預約系統</h1>
+                        <p class="text-xs text-zinc-500 font-medium uppercase tracking-wider">Study Room Reservation (Local)</p>
+                    </div>
+                </div>
+                <div class="hidden sm:flex items-center gap-2 text-xs font-mono text-zinc-500">
+                    <div class="flex items-center gap-1.5">
+                        <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                        <span>本地處理中</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters & Stats -->
+            <div class="space-y-3">
+                <!-- Category Filter -->
+                <div class="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar" id="categoryFilterContainer">
+                    <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter shrink-0">類別:</span>
+                    <!-- Dynamic Buttons -->
+                </div>
+
+                <!-- Status Filter & Stats -->
+                <div class="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar" id="statusFilterContainer">
+                    <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter shrink-0">狀態:</span>
+                    <!-- Dynamic Buttons -->
+                    
+                    <div class="flex items-center gap-4 ml-auto shrink-0 bg-white shadow-sm px-4 py-1.5 rounded-2xl border border-zinc-200" id="statsContainer">
+                        <!-- Dynamic Stats -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-5xl mx-auto p-4">
+        <div id="seatsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Dynamic Cards -->
+        </div>
+    </main>
+
+    <!-- Modal (Native Dialog) -->
+    <dialog id="reserveDialog" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 m-0 p-0 rounded-xl border border-zinc-200 shadow-2xl bg-white w-full max-w-[calc(100%-2rem)] sm:max-w-sm outline-none overflow-hidden">
+        <div class="p-4 bg-muted/30 border-b border-zinc-100">
+            <h2 class="text-lg font-bold text-zinc-900" id="dialogTitle">預約座位</h2>
+            <p class="text-xs text-zinc-500 mt-1">請輸入您的預約信息（如：姓名、用途或預計時長）。</p>
+        </div>
+        <form method="dialog" id="reserveForm" class="p-4 space-y-4">
+            <div class="space-y-2">
+                <label for="reservationContent" class="text-xs font-medium text-zinc-500">預約內容</label>
+                <input type="text" id="reservationContentInput" placeholder="例如：王小明 - 準備考試" required class="w-full h-10 px-3 bg-white border border-zinc-200 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-sm">
+            </div>
+            <div class="flex gap-2 justify-end pt-2">
+                <button type="button" onclick="document.getElementById('reserveDialog').close()" class="px-4 h-9 text-xs font-medium text-zinc-500 hover:text-zinc-700 transition-colors">取消</button>
+                <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-6 h-9 rounded-lg text-xs font-bold shadow-lg shadow-purple-500/20 transition-all">確認預約</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Mobile Bottom Info -->
+    <div class="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-zinc-200 p-4 sm:hidden">
+        <div class="flex justify-around items-center text-[10px] text-zinc-500 uppercase tracking-widest font-bold" id="mobileStatsContainer">
+            <!-- Dynamic Mobile Stats -->
+        </div>
+    </div>
+
+    <script>
+        // --- Constants & Config ---
+        const CATEGORIES = ['自修', '閱覽', '電腦', '兒童'];
+        const CATEGORY_ICONS = {
+            '自修': 'book-open',
+            '閱覽': 'library',
+            '電腦': 'monitor',
+            '兒童': 'baby'
+        };
+
+        let currentCategoryFilter = '全部';
+        let currentStatusFilter = '全部';
+        let currentSeatToReserve = null;
+
+        // --- Core Functions (As Requested) ---
+
+        /** 4 & 5. Save Record to localStorage */
+        function saveData(newRecords) {
+            localStorage.setItem('records', JSON.stringify(newRecords));
+        }
+
+        /** 6b. Load Data from localStorage */
+        function loadData() {
+            const data = localStorage.getItem('records');
+            const records = data ? JSON.parse(data) : [];
+            
+            // Seed initial data if empty
+            if (records.length === 0) {
+                const initial = [];
+                CATEGORIES.forEach((cat, catIdx) => {
+                    for (let i = 1; i <= 4; i++) {
+                        initial.push({
+                            id: `${catIdx + 1}_${Math.random().toString(36).slice(2, 6)}`,
+                            createdAt: new Date().toISOString(),
+                            name: `${cat}-${i.toString().padStart(2, '0')}`,
+                            category: cat,
+                            isReserved: false,
+                            status: 'active', // Default "active" as per Rule 4
+                            reservationContent: '',
+                            updatedAt: new Date().toISOString()
+                        });
+                    }
+                });
+                saveData(initial);
+                return initial;
+            }
+            return records;
+        }
+
+        /** 6c. Render UI */
+        function renderList() {
+            const allRecords = loadData();
+            
+            // 1. Calculate Stats
+            const stats = {
+                active: allRecords.filter(r => r.isReserved && r.status === 'active').length,
+                done: allRecords.filter(r => r.isReserved && r.status === 'done').length,
+                available: allRecords.filter(r => !r.isReserved).length,
+                total: allRecords.length
+            };
+
+            // 2. Render Header Stats
+            document.getElementById('statsContainer').innerHTML = `
+                <div class="flex items-center gap-1.5">
+                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                    <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-tight">Active:</span>
+                    <span class="text-xs font-mono font-bold text-emerald-600">${stats.active}</span>
+                </div>
+                <div class="flex items-center gap-1.5 border-l border-zinc-100 pl-4">
+                    <div class="w-1.5 h-1.5 rounded-full bg-zinc-400"></div>
+                    <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-tight">Done:</span>
+                    <span class="text-xs font-mono font-bold text-zinc-500">${stats.done}</span>
+                </div>
+                <div class="flex items-center gap-1.5 border-l border-zinc-100 pl-4">
+                    <div class="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                    <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-tight">Avail:</span>
+                    <span class="text-xs font-mono font-bold text-blue-600">${stats.available}</span>
+                </div>
+                <div class="flex items-center gap-1.5 border-l border-zinc-200 pl-4">
+                    <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-tight">Total:</span>
+                    <span class="text-xs font-mono font-bold text-purple-600">${stats.total}</span>
+                </div>
+            `;
+
+            // 3. Render Mobile Stats
+            document.getElementById('mobileStatsContainer').innerHTML = `
+                <div class="flex items-center gap-1.5 text-emerald-600">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]"></div>
+                    <span>Active: ${stats.active}</span>
+                </div>
+                <div class="flex items-center gap-1.5 text-zinc-500">
+                    <div class="w-2 h-2 rounded-full bg-zinc-400"></div>
+                    <span>Done: ${stats.done}</span>
+                </div>
+                <div class="flex items-center gap-1.5 text-blue-600">
+                    <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                    <span>Avail: ${stats.available}</span>
+                </div>
+            `;
+
+            // 4. Render Filters
+            renderFilters();
+
+            // 5. Apply Filters and Sorting
+            let filtered = allRecords;
+            if (currentCategoryFilter !== '全部') {
+                filtered = filtered.filter(r => r.category === currentCategoryFilter);
+            }
+            if (currentStatusFilter !== '全部') {
+                filtered = filtered.filter(r => {
+                    const rStatus = r.isReserved ? r.status : 'available';
+                    if (currentStatusFilter === 'active') return rStatus === 'active';
+                    if (currentStatusFilter === 'done') return rStatus === 'done';
+                    if (currentStatusFilter === 'avail') return rStatus === 'available';
+                    return true;
+                });
+            }
+
+            // Sort: active > available > done, then newest updated first
+            filtered.sort((a, b) => {
+                const sA = a.isReserved ? a.status : 'available';
+                const sB = b.isReserved ? b.status : 'available';
+                const priority = { 'active': 0, 'available': 1, 'done': 2 };
+                if (priority[sA] !== priority[sB]) return priority[sA] - priority[sB];
+                return new Date(b.updatedAt) - new Date(a.updatedAt);
+            });
+
+            // 6. Render List
+            const grid = document.getElementById('seatsGrid');
+            grid.innerHTML = filtered.map(seat => {
+                const isReserved = seat.isReserved;
+                const isDone = seat.status === 'done';
+                const cardClass = isReserved 
+                    ? (isDone ? "bg-zinc-100 border-zinc-300 opacity-80" : "border-red-200 bg-red-50/30") 
+                    : "border-emerald-100 hover:border-emerald-300 hover:shadow-md";
+
+                return `
+                <div class="transition-all duration-200">
+                    <div class="relative overflow-hidden border border-zinc-200 bg-white rounded-xl transition-all duration-300 group shadow-sm ${cardClass}">
+                        <div class="p-4 pb-2">
+                            <div class="flex justify-between items-start">
+                                <div class="flex gap-1.5">
+                                    <span class="bg-zinc-100 border border-zinc-200 text-zinc-500 font-mono text-[10px] px-2 py-0 rounded flex items-center">
+                                        ${seat.id.split('_')[0]}
+                                    </span>
+                                    ${isReserved && isDone ? `
+                                        <span class="bg-zinc-500 text-white text-[10px] px-2 py-0 rounded flex items-center">
+                                            已完成
+                                        </span>
+                                    ` : ''}
+                                </div>
+                                <div class="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest ${isReserved ? (isDone ? "text-zinc-500" : "text-red-600") : "text-emerald-600"}">
+                                    <i data-lucide="${isReserved ? (isDone ? 'clock' : 'circle-x') : 'circle-check'}" class="w-3 h-3"></i>
+                                    ${isReserved ? (isDone ? '使用完畢' : '已預約') : '可預約'}
+                                </div>
+                            </div>
+                            <h3 class="text-lg font-bold mt-2 flex items-center gap-2 text-zinc-900">
+                                ${seat.name}
+                                <span class="text-zinc-400 text-xs font-normal">/ ${seat.category}</span>
+                            </h3>
+                        </div>
+
+                        <div class="px-4 pb-4 min-h-[80px]">
+                            ${isReserved ? `
+                                <div class="space-y-3">
+                                    <div class="bg-white rounded-lg p-3 border ${isDone ? 'border-zinc-200 shadow-none' : 'border-red-100 shadow-inner'}">
+                                        <p class="text-sm text-zinc-700 leading-relaxed italic">
+                                            "${seat.reservationContent}"
+                                        </p>
+                                    </div>
+                                    <div class="flex items-center gap-2 text-[10px] text-zinc-400">
+                                        <i data-lucide="clock" class="w-3 h-3"></i>
+                                        <span>${formatTime(seat.updatedAt)} 預約</span>
+                                    </div>
+                                </div>
+                            ` : `
+                                <div class="flex flex-col items-center justify-center h-full py-4 opacity-20 group-hover:opacity-40 transition-opacity">
+                                    <i data-lucide="plus" class="w-8 h-8 text-zinc-400 mb-1"></i>
+                                    <p class="text-xs text-zinc-400">點擊下方按鈕預約</p>
+                                </div>
+                            `}
+                        </div>
+
+                        <div class="px-4 pb-4 pt-0 flex flex-col gap-2">
+                            ${isReserved ? `
+                                <button onclick="toggleSeatStatus('${seat.id}')" class="w-full text-xs h-8 border border-zinc-200 rounded-md transition-all ${isDone ? "hover:bg-zinc-200 text-zinc-600" : "hover:bg-red-50 text-zinc-600 hover:text-red-600"}">
+                                    ${isDone ? '取消結束' : '結束使用'}
+                                </button>
+                                <button onclick="cancelReservation('${seat.id}')" class="w-full text-zinc-400 hover:text-red-600 hover:bg-red-50 text-xs h-8 transition-colors rounded-md font-medium">
+                                    取消預約
+                                </button>
+                            ` : `
+                                <button onclick="openReserveModal('${seat.id}', '${seat.name}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 shadow-sm rounded-md font-bold transition-all">
+                                    立即預約
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+
+            // Initialize Lucide icons
+            lucide.createIcons();
+        }
+
+        // --- Helper Components & Logic ---
+
+        function renderFilters() {
+            // Category Buttons
+            const catContainer = document.getElementById('categoryFilterContainer');
+            let catHtml = `<button onclick="setCategoryFilter('全部')" class="rounded-full px-4 h-8 text-xs transition-all shrink-0 border ${currentCategoryFilter === '全部' ? "bg-purple-600 text-white border-purple-600 shadow-md" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"}">全部</button>`;
+            CATEGORIES.forEach(cat => {
+                const isActive = currentCategoryFilter === cat;
+                catHtml += `
+                    <button onclick="setCategoryFilter('${cat}')" class="rounded-full px-4 h-8 text-xs flex items-center gap-1.5 transition-all shrink-0 border ${isActive ? "bg-purple-600 text-white border-purple-600 shadow-md" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"}">
+                        <i data-lucide="${CATEGORY_ICONS[cat]}" class="w-3.5 h-3.5"></i>
+                        ${cat}
+                    </button>
+                `;
+            });
+            catContainer.innerHTML = `<span class="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter shrink-0">類別:</span>` + catHtml;
+
+            // Status Buttons
+            const statusContainer = document.getElementById('statusFilterContainer');
+            const statsDiv = document.getElementById('statsContainer');
+            
+            const btnClass = (active) => `rounded-full px-4 h-8 text-xs transition-all shrink-0 border ${active}`;
+            
+            let statusHtml = `
+                <button onclick="setStatusFilter('全部')" class="${btnClass(currentStatusFilter === '全部' ? "bg-zinc-800 text-white border-zinc-800 shadow-md" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50")}">全部</button>
+                <button onclick="setStatusFilter('active')" class="${btnClass(currentStatusFilter === 'active' ? "bg-emerald-600 text-white border-emerald-600 shadow-md" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50")}">只看 active</button>
+                <button onclick="setStatusFilter('done')" class="${btnClass(currentStatusFilter === 'done' ? "bg-zinc-400 text-white border-zinc-400 shadow-md" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50")}">只看 done</button>
+                <button onclick="setStatusFilter('avail')" class="${btnClass(currentStatusFilter === 'avail' ? "bg-blue-600 text-white border-blue-600 shadow-md" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50")}">只看 avail</button>
+            `;
+            statusContainer.innerHTML = `<span class="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter shrink-0">狀態:</span>` + statusHtml;
+            statusContainer.appendChild(statsDiv); // Re-attach stats after clear
+        }
+
+        function setCategoryFilter(val) {
+            currentCategoryFilter = val;
+            renderList();
+        }
+
+        function setStatusFilter(val) {
+            currentStatusFilter = val;
+            renderList();
+        }
+
+        function formatTime(dateStr) {
+            const date = new Date(dateStr);
+            return date.getHours().toString().padStart(2, '0') + ":" + date.getMinutes().toString().padStart(2, '0');
+        }
+
+        // --- Interaction Logic ---
+
+        function openReserveModal(id, name) {
+            currentSeatToReserve = id;
+            document.getElementById('dialogTitle').innerText = `預約座位 ${name}`;
+            document.getElementById('reservationContentInput').value = '';
+            document.getElementById('reserveDialog').showModal();
+        }
+
+        document.getElementById('reserveForm').onsubmit = function(e) {
+            const content = document.getElementById('reservationContentInput').value;
+            if (!content) return;
+
+            const records = loadData();
+            const index = records.findIndex(r => r.id === currentSeatToReserve);
+            if (index !== -1) {
+                records[index] = {
+                    ...records[index],
+                    isReserved: true,
+                    status: 'active',
+                    reservationContent: content,
+                    updatedAt: new Date().toISOString()
+                };
+                saveData(records);
+                renderList();
+                this.closest('dialog').close();
+            }
+        };
+
+        function cancelReservation(id) {
+            const records = loadData();
+            const index = records.findIndex(r => r.id === id);
+            if (index !== -1) {
+                records[index].isReserved = false;
+                records[index].status = 'active'; // Default per rule 4
+                records[index].reservationContent = '';
+                records[index].updatedAt = new Date().toISOString();
+                saveData(records);
+                renderList();
+            }
+        }
+
+        function toggleSeatStatus(id) {
+            const records = loadData();
+            const index = records.findIndex(r => r.id === id);
+            if (index !== -1) {
+                records[index].status = records[index].status === 'done' ? 'active' : 'done';
+                records[index].updatedAt = new Date().toISOString();
+                saveData(records);
+                renderList();
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            renderList();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "name": "自習室預約系統",
+  "description": "一個簡潔的自習室座位預約系統，支持分類篩選、實時狀態更新與暗色主題佈局。",
+  "requestFramePermissions": []
+}
