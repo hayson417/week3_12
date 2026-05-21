@@ -57,8 +57,12 @@
                         <p class="text-xs text-zinc-500 font-medium uppercase tracking-wider">Study Room Reservation (Local + Sheet)</p >
                     </div>
                 </div>
-                <div class="hidden sm:flex items-center gap-2 text-xs font-mono text-zinc-500">
-                    <div class="flex items-center gap-1.5">
+                <div class="hidden sm:flex items-center gap-2">
+                    <button onclick="handleAISummary()" id="aiBtn" class="flex items-center gap-2 bg-zinc-800 text-zinc-100 px-4 py-2 rounded-full font-medium hover:bg-zinc-700 transition-colors active:scale-95 border border-zinc-700 disabled:opacity-50">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        <span id="aiBtnText">AI 摘要</span>
+                    </button>
+                    <div class="flex items-center gap-1.5 text-xs font-mono text-zinc-500">
                         <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
                         <span>雙重備份中</span>
                     </div>
@@ -153,80 +157,66 @@
         let currentStatusFilter = '全部';
         let currentSeatToReserve = null;
 
-        // --- Core Functions ---
-        function saveData(newRecords) {
-            localStorage.setItem('records', JSON.stringify(newRecords));
+        // --- 工具：標準化從 Sheet 取得的記錄 ---
+        function normalizeRecord(record) {
+            return {
+                id: record.id || record.ID || "",
+                createdAt: record.createdAt || record.CreatedAt || "",
+                name: record.name || record.Name || "",
+                category: record.category || record.Category || "其他",
+                isReserved: record.isReserved !== undefined ? record.isReserved : (record.IsReserved || false),
+                status: record.status || record.Status || "active",
+                reservationContent: record.reservationContent || record.ReservationContent || "",
+                updatedAt: record.updatedAt || record.UpdatedAt || new Date().toISOString()
+            };
         }
 
-        // 載入資料 (優先使用 localStorage，若無則嘗試從 Google Sheet 取得，最後才產生種子資料)
+        // --- 從 Sheet 讀取遠端資料（使用 GET） ---
+        async function fetchRecordsFromSheet() {
+            if (APPS_SCRIPT_URL.includes("PASTE")) return null;
+            try {
+                const res = await fetch(APPS_SCRIPT_URL);
+                const data = await res.json();
+                // 支援 { records: [...] } 或直接陣列
+                const rawRecords = Array.isArray(data) ? data : (data.records || null);
+                return rawRecords ? rawRecords.map(normalizeRecord) : null;
+            } catch (e) {
+                console.warn("從 Sheet 讀取失敗", e);
+                return null;
+            }
+        }
+
+        // --- 本地儲存輔助 ---
+        function getLocalRecords() {
+            const data = localStorage.getItem('records');
+            return data ? JSON.parse(data) : [];
+        }
+
+        function saveLocalRecords(records) {
+            localStorage.setItem('records', JSON.stringify(records));
+        }
+
+        // --- 初始化載入：遠端優先，localStorage 做 fallback ---
         async function loadData() {
-            const localData = localStorage.getItem('records');
-            if (localData) {
-                return JSON.parse(localData);
+            const remote = await fetchRecordsFromSheet();
+            if (remote) {
+                saveLocalRecords(remote);
+                return remote;
             }
-            
-            // 無本地資料：嘗試從 Google Sheet 拉取
-            if (APPS_SCRIPT_URL && APPS_SCRIPT_URL !== "PASTE_YOUR_APPS_SCRIPT_URL_HERE") {
-                try {
-                    const res = await fetch(APPS_SCRIPT_URL, { method: "GET" });
-                    const remoteRecords = await res.json();
-                    if (Array.isArray(remoteRecords) && remoteRecords.length > 0) {
-                        saveData(remoteRecords);
-                        return remoteRecords;
-                    }
-                } catch (err) {
-                    console.warn("從 Google Sheet 讀取失敗，將使用本地種子資料", err);
-                }
-            }
-            
-            // 產生初始種子資料
-            const initial = [];
-            CATEGORIES.forEach((cat, catIdx) => {
-                for (let i = 1; i <= 4; i++) {
-                    initial.push({
-                        id: `${catIdx + 1}_${Math.random().toString(36).slice(2, 6)}`,
-                        createdAt: new Date().toISOString(),
-                        name: `${cat}-${i.toString().padStart(2, '0')}`,
-                        category: cat,
-                        isReserved: false,
-                        status: 'active',
-                        reservationContent: '',
-                        updatedAt: new Date().toISOString()
-                    });
-                }
-            });
-            saveData(initial);
-            // 同步所有新座位到 Google Sheet (個別 create)
-            for (const rec of initial) {
-                await syncToSheet({ action: "create", record: rec });
-            }
-            return initial;
+            // 無遠端資料，回傳本地備份（可能為空）
+            return getLocalRecords();
         }
 
-        // 輔助：取得單筆 record 並同步 (更新後呼叫)
-        async function updateRecordAndSync(recordId, updatedFields) {
-            const records = await loadData(); // 確保最新
-            const index = records.findIndex(r => r.id === recordId);
-            if (index === -1) return false;
-            const oldRecord = records[index];
-            const newRecord = { ...oldRecord, ...updatedFields, updatedAt: new Date().toISOString() };
-            records[index] = newRecord;
-            saveData(records);
-            // 同步到 Google Sheet (update)
-            await syncToSheet({ action: "update", id: recordId, record: newRecord });
-            renderList(); // 重新渲染 UI
-            return true;
-        }
-// 渲染函式 (與原版相同，但內部使用新的異步 loadData)
-        async function renderList() {
-            const allRecords = await loadData();
+        // --- 渲染主要 UI ---
+        async function renderList(recordsOverride) {
+            const records = recordsOverride || getLocalRecords();
             
             // 計算統計
             const stats = {
-                active: allRecords.filter(r => r.isReserved && r.status === 'active').length,
-                done: allRecords.filter(r => r.isReserved && r.status === 'done').length,
-                available: allRecords.filter(r => !r.isReserved).length,
-                total: allRecords.length
+                active: records.filter(r => r.isReserved && r.status === 'active').length,
+                done: records.filter(r => r.isReserved && r.status === 'done').length,
+                available: records.filter(r => !r.isReserved).length,
+                total: records.length
             };
 
             // 更新 Header Stats
@@ -271,7 +261,7 @@
             renderFilters();
 
             // 過濾與排序
-            let filtered = allRecords;
+            let filtered = records;
             if (currentCategoryFilter !== '全部') {
                 filtered = filtered.filter(r => r.category === currentCategoryFilter);
             }
@@ -415,7 +405,22 @@
             return date.getHours().toString().padStart(2, '0') + ":" + date.getMinutes().toString().padStart(2, '0');
         }
 
-        // --- 互動函數 (皆改為呼叫 updateRecordAndSync 以同時更新本地 + 遠端) ---
+        // --- 預約相關操作（使用本地記錄，不重新從遠端取得） ---
+        async function updateRecordAndSync(recordId, updatedFields) {
+            const records = getLocalRecords();
+            const index = records.findIndex(r => r.id === recordId);
+            if (index === -1) return false;
+            const oldRecord = records[index];
+            const newRecord = { ...oldRecord, ...updatedFields, updatedAt: new Date().toISOString() };
+            records[index] = newRecord;
+            saveLocalRecords(records);
+            // 同步到 Google Sheet (update)
+            await syncToSheet({ action: "update", id: recordId, record: newRecord });
+            // 即時渲染最新資料
+            await renderList(records);
+            return true;
+        }
+
         function openReserveModal(id, name) {
             currentSeatToReserve = id;
             document.getElementById('dialogTitle').innerText = `預約座位 ${name}`;
@@ -446,7 +451,7 @@
         }
 
         async function toggleSeatStatus(id) {
-            const records = await loadData();
+            const records = getLocalRecords();
             const seat = records.find(r => r.id === id);
             if (seat) {
                 const newStatus = seat.status === 'done' ? 'active' : 'done';
@@ -454,10 +459,75 @@
             }
         }
 
-        // 初始化
-        document.addEventListener('DOMContentLoaded', () => {
-            renderList();
-        });
+        // --- AI 摘要功能 ---
+        async function askAI(userPrompt) {
+            const res = await fetch(APPS_SCRIPT_URL, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain" },
+                body: JSON.stringify({ action: "askAI", prompt: userPrompt })
+            });
+            const data = await res.json();
+            return data.result || data.error || "AI 冇回應";
+        }
+
+        async function handleAISummary() {
+            const btn = document.getElementById('aiBtn');
+            const text = document.getElementById('aiBtnText');
+            btn.disabled = true;
+            text.textContent = '思考中...';
+            try {
+                const records = getLocalRecords();
+                if (records.length === 0) {
+                    alert('未有預約資料可以摘要');
+                    return;
+                }
+                // 產生摘要用的文字，取最近30筆
+                const summaryInput = records.slice(0, 30).map(r => {
+                    const statusText = r.isReserved ? (r.status === 'active' ? '使用中' : '已完成') : '可預約';
+                    return `[${r.category}] ${r.name} - ${statusText}${r.reservationContent ? '：' + r.reservationContent : ''}`;
+                }).join('\n');
+                const prompt = '以下是自習室預約系統的即時狀態。請用繁體中文，用3-5句概括目前的使用情況、熱門類別以及有無需要注意的時段或模式：\n\n' + summaryInput;
+                const result = await askAI(prompt);
+                alert(result);
+            } catch (e) {
+                alert('AI 出錯：' + e.message);
+            } finally {
+                btn.disabled = false;
+                text.textContent = 'AI 摘要';
+            }
+        }
+
+        // --- 初始化 ---
+        window.onload = async () => {
+            // 先從遠端（或本地）載入完整資料
+            const initialRecords = await loadData();
+            // 若無任何資料（首次使用），建立種子資料並同步到 Sheet
+            if (initialRecords.length === 0) {
+                const seed = [];
+                CATEGORIES.forEach((cat, catIdx) => {
+                    for (let i = 1; i <= 4; i++) {
+                        seed.push({
+                            id: `${catIdx + 1}_${Math.random().toString(36).slice(2, 6)}`,
+                            createdAt: new Date().toISOString(),
+                            name: `${cat}-${i.toString().padStart(2, '0')}`,
+                            category: cat,
+                            isReserved: false,
+                            status: 'active',
+                            reservationContent: '',
+                            updatedAt: new Date().toISOString()
+                        });
+                    }
+                });
+                saveLocalRecords(seed);
+                for (const rec of seed) {
+                    await syncToSheet({ action: "create", record: rec });
+                }
+                await renderList(seed);
+            } else {
+                await renderList(initialRecords);
+            }
+            lucide.createIcons();
+        };
     </script>
 </body>
 </html>
